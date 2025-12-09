@@ -164,6 +164,7 @@ const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ isOpen, onClo
       appId: '',
     };
   });
+  const [pasteText, setPasteText] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -181,10 +182,88 @@ const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ isOpen, onClo
           appId: '',
         });
       }
+      setPasteText('');
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handlePasteConfig = () => {
+    try {
+      // JSON 형식 파싱 시도
+      let parsed: any;
+      
+      // 먼저 JSON.parse 시도
+      try {
+        parsed = JSON.parse(pasteText);
+      } catch {
+        // JSON.parse 실패 시, JavaScript 객체 형식 파싱 시도
+        // const firebaseConfig = {...} 또는 {...} 형식 지원
+        const objectMatch = pasteText.match(/\{[\s\S]*\}/);
+        if (objectMatch) {
+          const objectStr = objectMatch[0];
+          
+          // 각 필드를 정규식으로 추출 (따옴표 처리 개선)
+          const extractValue = (key: string): string => {
+            // key: "value" 또는 key: 'value' 형식 매칭 (대소문자 구분 없음)
+            // 여러 줄에 걸친 값도 처리 가능하도록 [\s\S] 사용
+            const pattern = new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`, 'i');
+            const match = objectStr.match(pattern);
+            if (match && match[1]) {
+              return match[1].trim();
+            }
+            return '';
+          };
+          
+          parsed = {
+            apiKey: extractValue('apiKey'),
+            authDomain: extractValue('authDomain'),
+            databaseURL: extractValue('databaseURL'),
+            projectId: extractValue('projectId'),
+            storageBucket: extractValue('storageBucket'),
+            messagingSenderId: extractValue('messagingSenderId'),
+            appId: extractValue('appId'),
+          };
+          
+          // 값이 하나도 없으면 에러
+          if (!parsed.apiKey && !parsed.databaseURL && !parsed.projectId) {
+            throw new Error('No valid config found');
+          }
+        } else {
+          throw new Error('Invalid format');
+        }
+      }
+
+      // 파싱된 값으로 설정 업데이트
+      if (parsed && typeof parsed === 'object') {
+        setFirebaseConfig(prev => ({
+          apiKey: parsed.apiKey || prev.apiKey,
+          authDomain: parsed.authDomain || prev.authDomain,
+          databaseURL: parsed.databaseURL || prev.databaseURL,
+          projectId: parsed.projectId || prev.projectId,
+          storageBucket: parsed.storageBucket || prev.storageBucket,
+          messagingSenderId: parsed.messagingSenderId || prev.messagingSenderId,
+          appId: parsed.appId || prev.appId,
+        }));
+        setPasteText('');
+        onShowConfirm(
+          '설정 적용 완료',
+          'Firebase 설정이 적용되었습니다. 저장 버튼을 눌러 저장하세요.',
+          () => {},
+          'default'
+        );
+      } else {
+        throw new Error('Invalid format');
+      }
+    } catch (error) {
+      onShowConfirm(
+        '파싱 오류',
+        '설정 형식이 올바르지 않습니다. JSON 형식 또는 JavaScript 객체 형식으로 입력해주세요.',
+        () => {},
+        'warning'
+      );
+    }
+  };
 
   const handleSave = () => {
     if (firebaseConfig.apiKey && firebaseConfig.databaseURL && firebaseConfig.projectId) {
@@ -248,6 +327,44 @@ const FirebaseConfigModal: React.FC<FirebaseConfigModalProps> = ({ isOpen, onClo
         </div>
 
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+          {/* 붙여넣기 영역 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-[12px] p-4 mb-4">
+            <label className="text-xs font-semibold text-slate-700 mb-2 block">
+              빠른 설정 (선택사항)
+            </label>
+            <p className="text-xs text-slate-500 mb-2">
+              Firebase 설정 객체를 한 번에 붙여넣으세요
+            </p>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={`const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "project.firebaseapp.com",
+  databaseURL: "https://...",
+  projectId: "project-id",
+  storageBucket: "project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123"
+};`}
+              className="w-full bg-white border border-blue-300 rounded-[8px] px-3 py-2 text-xs font-mono text-slate-700 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+              rows={8}
+            />
+            <button
+              onClick={handlePasteConfig}
+              disabled={!pasteText.trim()}
+              className="mt-2 w-full py-2 bg-blue-600 text-white text-xs font-semibold rounded-[8px] hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200"
+            >
+              설정 적용
+            </button>
+          </div>
+
+          <div className="border-t border-gray-200 pt-4">
+            <label className="text-xs font-semibold text-slate-700 mb-3 block">
+              개별 입력
+            </label>
+          </div>
+
           <div>
             <label className="text-xs font-medium text-slate-700 mb-1.5 block">API Key *</label>
             <input

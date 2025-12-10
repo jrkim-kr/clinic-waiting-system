@@ -1886,7 +1886,7 @@ const AdminView: React.FC = () => {
         {/* Banner Content */}
         <div className="flex-1 min-h-0 overflow-hidden px-1 sm:px-2 py-3 sm:py-4">
           {bannerImages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 py-8">
+            <div className="h-full flex flex-col items-center justify-start text-slate-400 opacity-60 py-8">
               <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3 sm:mb-4">
                 <ImageIcon size={24} className="sm:w-8 sm:h-8" />
               </div>

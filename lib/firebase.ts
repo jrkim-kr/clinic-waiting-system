@@ -1,5 +1,6 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getDatabase, Database, ref, set, get, onValue, off, Query, DataSnapshot } from 'firebase/database';
+import { getStorage, Storage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Patient, ClinicSettings } from '../types';
 
 // Firebase 설정 타입
@@ -16,6 +17,7 @@ interface FirebaseConfig {
 // Firebase 초기화
 let app: FirebaseApp | null = null;
 let database: Database | null = null;
+let storage: Storage | null = null;
 
 export const initializeFirebase = (config: FirebaseConfig): void => {
   if (app) {
@@ -25,6 +27,9 @@ export const initializeFirebase = (config: FirebaseConfig): void => {
 
   app = initializeApp(config);
   database = getDatabase(app);
+  if (config.storageBucket) {
+    storage = getStorage(app);
+  }
 };
 
 /**
@@ -41,6 +46,13 @@ export const getFirebaseDatabase = (): Database => {
   return database;
 };
 
+export const getFirebaseStorage = (): Storage => {
+  if (!storage) {
+    throw new Error('Firebase Storage is not initialized. Check storageBucket config.');
+  }
+  return storage;
+};
+
 // 데이터베이스 경로 상수
 export const DB_PATHS = {
   PATIENTS: 'clinic-waiting-system/patients',
@@ -50,6 +62,7 @@ export const DB_PATHS = {
   SHOW_DOCTOR_NAMES: 'clinic-waiting-system/settings/showDoctorNames',
   NOTICES: 'clinic-waiting-system/settings/notices',
   CUSTOM_STATUSES: 'clinic-waiting-system/settings/customStatuses',
+  BANNER_IMAGES: 'clinic-waiting-system/settings/bannerImages',
 } as const;
 
 // ==================== Patients 관련 함수 ====================
@@ -206,12 +219,37 @@ export const getSettings = async (): Promise<ClinicSettings> => {
     }
   }
   
+  // bannerImages를 배열로 변환
+  let bannerImages: string[] = [];
+  if (settingsData.bannerImages) {
+    if (Array.isArray(settingsData.bannerImages)) {
+      bannerImages = settingsData.bannerImages;
+    } else {
+      bannerImages = Object.values(settingsData.bannerImages) as string[];
+    }
+  }
+  
+  // 로컬스토리지의 이미지도 병합 (로컬스토리지가 우선)
+  const localImages = getBannerImagesFromStorage();
+  if (localImages.length > 0) {
+    // 로컬스토리지의 이미지가 있으면 병합 (중복 제거)
+    const allImages = [...bannerImages];
+    localImages.forEach(img => {
+      if (!allImages.includes(img)) {
+        allImages.push(img);
+      }
+    });
+    bannerImages = allImages;
+  }
+  
   return {
     roomNames: settingsData.roomNames || {},
     doctorNames: settingsData.doctorNames || {},
     showDoctorNames: settingsData.showDoctorNames ?? true,
+    showBanner: settingsData.showBanner ?? true,
     notices: notices,
     customStatuses: settingsData.customStatuses ? Object.values(settingsData.customStatuses) : [],
+    bannerImages: bannerImages,
   } as ClinicSettings;
 };
 
@@ -234,12 +272,34 @@ export const updateSettings = async (settings: ClinicSettings): Promise<void> =>
     customStatusesObj[status.id] = status;
   });
   
+  // bannerImages를 배열로 변환 (Firebase Realtime Database는 배열을 객체로 저장)
+  // base64 이미지는 크기가 크므로 Firebase에는 저장하지 않고 로컬스토리지에만 저장
+  // Firebase에는 이미지 개수만 저장하거나, 작은 썸네일만 저장할 수 있지만
+  // 현재는 로컬스토리지에만 저장하고 Firebase에는 저장하지 않음
+  const bannerImagesObj: Record<number, string> = {};
+  // base64 이미지(data:로 시작)는 Firebase에 저장하지 않음
+  if (settings.bannerImages) {
+    settings.bannerImages.forEach((url, index) => {
+      // Firebase Storage URL만 저장 (base64는 로컬스토리지에만)
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+      bannerImagesObj[index] = url;
+      }
+    });
+  }
+  
+  // 로컬스토리지에 현재 이미지 목록 저장
+  if (settings.bannerImages && settings.bannerImages.length > 0) {
+    saveBannerImagesToStorage(settings.bannerImages);
+  }
+  
   await set(settingsRef, {
     roomNames: settings.roomNames,
     doctorNames: settings.doctorNames,
     showDoctorNames: settings.showDoctorNames,
+    showBanner: settings.showBanner,
     notices: noticesObj,
     customStatuses: customStatusesObj,
+    bannerImages: Object.keys(bannerImagesObj).length > 0 ? bannerImagesObj : null,
   });
 };
 
@@ -279,12 +339,37 @@ export const subscribeToSettings = (
       }
     }
     
+    // bannerImages를 배열로 변환
+    let bannerImages: string[] = [];
+    if (settingsData.bannerImages) {
+      if (Array.isArray(settingsData.bannerImages)) {
+        bannerImages = settingsData.bannerImages;
+      } else {
+        bannerImages = Object.values(settingsData.bannerImages) as string[];
+      }
+    }
+    
+    // 로컬스토리지의 이미지도 병합 (로컬스토리지가 우선)
+    const localImages = getBannerImagesFromStorage();
+    if (localImages.length > 0) {
+      // 로컬스토리지의 이미지가 있으면 병합 (중복 제거)
+      const allImages = [...bannerImages];
+      localImages.forEach(img => {
+        if (!allImages.includes(img)) {
+          allImages.push(img);
+        }
+      });
+      bannerImages = allImages;
+    }
+    
     const settings: ClinicSettings = {
       roomNames: settingsData.roomNames || {},
       doctorNames: settingsData.doctorNames || {},
       showDoctorNames: settingsData.showDoctorNames ?? true,
+      showBanner: settingsData.showBanner ?? true,
       notices: notices,
       customStatuses: customStatuses,
+      bannerImages: bannerImages,
     };
     
     callback(settings);
@@ -346,6 +431,104 @@ export const migrateFromLocalStorage = async (): Promise<void> => {
     } catch (error) {
       console.error('Error migrating settings:', error);
     }
+  }
+};
+
+// ==================== Banner Images 관련 함수 ====================
+
+const BANNER_IMAGES_STORAGE_KEY = 'clinic-waiting-system-banner-images';
+
+/**
+ * 파일을 base64 data URL로 변환
+ */
+const fileToDataURL = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * 로컬스토리지에서 배너 이미지 목록 가져오기
+ */
+const getBannerImagesFromStorage = (): string[] => {
+  try {
+    const stored = localStorage.getItem(BANNER_IMAGES_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Failed to load banner images from localStorage:', error);
+  }
+  return [];
+};
+
+/**
+ * 로컬스토리지에 배너 이미지 목록 저장하기
+ */
+const saveBannerImagesToStorage = (images: string[]): void => {
+  try {
+    localStorage.setItem(BANNER_IMAGES_STORAGE_KEY, JSON.stringify(images));
+  } catch (error) {
+    console.error('Failed to save banner images to localStorage:', error);
+    // 로컬스토리지 용량 초과 시 오래된 이미지부터 삭제
+    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+      throw new Error('로컬스토리지 용량이 부족합니다. 기존 이미지를 삭제한 후 다시 시도해주세요.');
+    }
+    throw error;
+  }
+};
+
+/**
+ * 배너 이미지 업로드 (로컬스토리지에 저장)
+ */
+export const uploadBannerImage = async (file: File): Promise<string> => {
+  try {
+    // 파일 크기 제한 확인 (로컬스토리지 제한 고려하여 5MB로 제한)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      throw new Error('이미지 파일 크기는 5MB 이하여야 합니다.');
+    }
+
+    // base64로 변환
+    const dataURL = await fileToDataURL(file);
+    
+    // base64 크기 확인 (로컬스토리지 제한 고려)
+    const base64Size = dataURL.length;
+    const estimatedSizeMB = (base64Size * 3) / 4 / 1024 / 1024; // base64는 원본보다 약 33% 큼
+    if (estimatedSizeMB > 4) {
+      throw new Error('이미지가 너무 큽니다. 더 작은 이미지를 사용해주세요.');
+    }
+
+    // 기존 이미지 목록 가져오기
+    const existingImages = getBannerImagesFromStorage();
+    
+    // 새 이미지 추가
+    const updatedImages = [...existingImages, dataURL];
+    
+    // 로컬스토리지에 저장
+    saveBannerImagesToStorage(updatedImages);
+    
+    return dataURL;
+  } catch (error: any) {
+    console.error('LocalStorage upload error:', error);
+    throw new Error(error.message || '이미지 업로드 실패');
+  }
+};
+
+/**
+ * 배너 이미지 삭제 (로컬스토리지에서)
+ */
+export const deleteBannerImageFromStorage = async (imageUrl: string): Promise<void> => {
+  try {
+    const images = getBannerImagesFromStorage();
+    const updatedImages = images.filter(url => url !== imageUrl);
+    saveBannerImagesToStorage(updatedImages);
+  } catch (error) {
+    console.error('Error deleting banner image from localStorage:', error);
+    throw error;
   }
 };
 

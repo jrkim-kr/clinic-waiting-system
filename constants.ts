@@ -78,6 +78,7 @@ export const INITIAL_SETTINGS: ClinicSettings = {
     [RoomId.ROOM_2]: '이원장',
   },
   showDoctorNames: true,
+  showBanner: true,
   notices: [
     "진료 순서가 되시면 성함을 확인하시고 진료실 앞에서 대기해주세요.",
     "점심시간은 오후 1시부터 2시까지입니다.",

@@ -10,6 +10,7 @@
 - ✅ 드래그 앤 드롭으로 대기 순서 변경
 - ✅ 커스텀 상태 추가/편집
 - ✅ 진료 안내 문구 관리
+- ✅ 배너 광고 영역 관리 (이미지 업로드, 슬라이드)
 - ✅ 관리자 모드 / 공개 모드 전환
 - ✅ Firebase Realtime Database 지원 (실시간 동기화)
 
@@ -90,7 +91,9 @@ npm run dev
 - `roomNames`: 진료실 이름
 - `doctorNames`: 원장 이름
 - `showDoctorNames`: 원장 이름 표시 여부
+- `showBanner`: 배너 광고 영역 표시 여부
 - `notices`: 안내 문구 목록
+- `bannerImages`: 배너 이미지 URL 배열
 - `customStatuses`: 커스텀 상태 목록
 
 자세한 스키마는 [파이어베이스 스키마](./docs/파이어베이스_스키마.md)를 참조하세요.

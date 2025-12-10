@@ -4,12 +4,12 @@ import AdminView from './pages/AdminView';
 import WaitingView from './pages/WaitingView';
 
 const App: React.FC = () => {
-    return (
+  return (
     <BrowserRouter>
       <Routes>
         <Route path="/admin" element={<AdminView />} />
         <Route path="/waiting" element={<WaitingView />} />
-        <Route path="/" element={<Navigate to="/admin" replace />} />
+        <Route path="/" element={<Navigate to="/waiting" replace />} />
       </Routes>
     </BrowserRouter>
   );

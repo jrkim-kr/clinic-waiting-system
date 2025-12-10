@@ -35,7 +35,7 @@
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
     }
 
-    /* Marquee Animation */
+    /* Marquee Animation - 왼쪽에서 오른쪽으로 */
     @keyframes marquee {
       0% {
         transform: translateX(0);
@@ -49,10 +49,31 @@
     .animate-marquee {
       display: flex;
       width: max-content;
-      animation: marquee 15s linear infinite;
+      animation: marquee 8s linear infinite;
     }
 
     .animate-marquee:hover {
+      animation-play-state: paused;
+    }
+
+    /* Marquee Animation - 오른쪽에서 왼쪽으로 */
+    @keyframes marquee-right {
+      0% {
+        transform: translateX(100%);
+      }
+
+      100% {
+        transform: translateX(-50%);
+      }
+    }
+
+    .animate-marquee-right {
+      display: flex;
+      width: max-content;
+      animation: marquee-right 15s linear infinite;
+    }
+
+    .animate-marquee-right:hover {
       animation-play-state: paused;
     }
 
@@ -82,7 +103,7 @@
     }
 
     .animate-scroll-up {
-      animation: scroll-up 30s linear infinite;
+      animation: scroll-up 15s linear infinite;
     }
 
     .animate-scroll-up:hover {
@@ -92,6 +113,7 @@
     .patient-list-container {
       overflow: hidden;
       position: relative;
+      min-width: 0;
     }
 
     .patient-list-wrapper {

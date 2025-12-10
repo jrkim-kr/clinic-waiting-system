@@ -45,6 +45,8 @@ export interface ClinicSettings {
   roomNames: { [key in RoomId]: string };
   doctorNames: { [key in RoomId]: string };
   showDoctorNames: boolean;
+  showBanner: boolean; // 배너 광고 영역 표시 여부
   notices: string[];
   customStatuses: CustomStatus[]; // Custom statuses for patients
+  bannerImages?: string[]; // 배너 이미지 URL 배열
 }
